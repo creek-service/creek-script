@@ -17,16 +17,20 @@
 #
 
 # List diffs for all local Creek git repos. Pass --name-only to only list names
+# Return codes:
+#  0: no changes found in any local Creek repo
+#  1: changes found in at least one local Creek repo
+#  2: error running git status command
 
 readonly BASE_DIR=${CREEK_BASE_DIR:?"CREEK_BASE_DIR not set. Set this to the root of your local Creek git repos."}
 
+local return_code=0
 for repo in $BASE_DIR/creek-*
 do
   if ! local git_status_output="$(cd $repo && git status --porcelain)"; then
       # `git status` had an error
-      error_code="$?"
-      echo "'git status' failed in $repo: $error_code"
-      exit 1
+      echo "'git status' failed in $repo: $?"
+      return 2
   elif [ "$git_status_output" = "" ]; then
       # Working directory is clean
   else
@@ -34,7 +38,10 @@ do
       echo ----- $(basename $repo) -------------------
       echo $(echo $git_status_output | grep "??")
       (cd $repo && git --no-pager diff "$@")
+      return_code=1
   fi
 done
+
+return $return_code
 
 
