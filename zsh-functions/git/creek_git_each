@@ -1,0 +1,54 @@
+#!/bin/zsh
+
+#
+# Copyright 2022 Creek Contributors (https://github.com/creek-service)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Run the supplied command in each local Creek repo
+# For example the following will run `git diff --name-only` in each repo.
+# creek_git_each git diff --name-only
+
+# Reads the CREEK_EACH_EXCLUDE variable for repo names to exclude, e.g.
+# CREEK_EACH_EXCLUDE="creek-base creek-test" creek_git_each pwd
+# ... will exclude creek-base and creek-test
+
+if ! BASE_DIR=$(creek_base_dir);
+then
+    return 1
+fi
+
+EXCLUDED=(${(@s: :)CREEK_EACH_EXCLUDE})
+
+for repo in "$BASE_DIR"/*
+do
+  repo_name=$(basename "$repo")
+  if (( EXCLUDED[(Ie)$repo_name] != 0 )); then
+    continue;
+  fi
+
+  if ! OUTPUT=$(eval "(cd $repo && $*)");
+  then
+      return 1
+  fi
+
+  if [ "$OUTPUT" != "" ];
+  then
+    echo "------- $(basename "$repo") -------------------"
+    echo "$OUTPUT"
+    echo
+  fi
+done
+
+

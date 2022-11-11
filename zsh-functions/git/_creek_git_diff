@@ -16,23 +16,16 @@
 # limitations under the License.
 #
 
-# Installs the Z-shell scripts onto the local machine
+# diff a single repo, including looking for untracked files.
 
-SCRIPT_DIR=${0:a:h}/zsh-functions
+if ! git_status_output="$(git status --porcelain)";
+then
+  # `git status` had an error
+  echo "'git status' failed in. Exit code: $?"
+  return 1
+elif [ "$git_status_output" != "" ]; then
+  # Working directory has uncommitted changes.
+  echo "$git_status_output" | grep "??"
+  git --no-pager diff --minimal "$@"
+fi
 
-echo >> ~/.zshrc
-echo "# Root directory containing Creek repos:" >> ~/.zshrc
-echo "CREEK_BASE_DIR=$(dirname $PWD)" >> ~/.zshrc
-echo "Set CREEK_BASE_DIR to $(dirname $PWD)"
-
-echo >> ~/.zshrc
-echo "# Install Creek functions:" >> ~/.zshrc
-
-find $SCRIPT_DIR -type d ! -empty -exec sh -c "
-  echo "fpath+={}" >> ~/.zshrc
-  echo added {} to fpath
-  " \;
-
-echo "autoload -Uz $SCRIPT_DIR/**/*(.:t)" >> ~/.zshrc
-echo "typeset -U fpath" >> ~/.zshrc
-source ~/.zshrc

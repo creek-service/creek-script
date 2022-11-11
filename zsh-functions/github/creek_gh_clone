@@ -16,23 +16,24 @@
 # limitations under the License.
 #
 
-# Installs the Z-shell scripts onto the local machine
+# Clone Creek repos.
+# Parameters:
+#  1 - the directory to output to. Default: current dir
+#  2 - repos to exclude, space-seperated
 
-SCRIPT_DIR=${0:a:h}/zsh-functions
+OUTPUT_DIR=${1:-.}
+EXCLUDED=("${(@s: :)2:-}")
 
-echo >> ~/.zshrc
-echo "# Root directory containing Creek repos:" >> ~/.zshrc
-echo "CREEK_BASE_DIR=$(dirname $PWD)" >> ~/.zshrc
-echo "Set CREEK_BASE_DIR to $(dirname $PWD)"
+if ! REPOS=($(gh repo list creek-service --limit 2000 --no-archived --json=name --jq '.[].name'));
+then
+  return 1
+fi
 
-echo >> ~/.zshrc
-echo "# Install Creek functions:" >> ~/.zshrc
+for repo_name in $REPOS
+do
+  if (( EXCLUDED[(Ie)$repo_name] != 0 )); then
+    continue;
+  fi
 
-find $SCRIPT_DIR -type d ! -empty -exec sh -c "
-  echo "fpath+={}" >> ~/.zshrc
-  echo added {} to fpath
-  " \;
-
-echo "autoload -Uz $SCRIPT_DIR/**/*(.:t)" >> ~/.zshrc
-echo "typeset -U fpath" >> ~/.zshrc
-source ~/.zshrc
+  (cd $OUTPUT_DIR && git clone git@github.com:creek-service/$repo_name.git)
+done
