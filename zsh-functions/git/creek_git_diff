@@ -16,23 +16,6 @@
 # limitations under the License.
 #
 
-# Installs the Z-shell scripts onto the local machine
+# List diffs for all local Creek git repos. Pass --name-only to only list names
 
-SCRIPT_DIR=${0:a:h}/zsh-functions
-
-echo >> ~/.zshrc
-echo "# Root directory containing Creek repos:" >> ~/.zshrc
-echo "CREEK_BASE_DIR=$(dirname $PWD)" >> ~/.zshrc
-echo "Set CREEK_BASE_DIR to $(dirname $PWD)"
-
-echo >> ~/.zshrc
-echo "# Install Creek functions:" >> ~/.zshrc
-
-find $SCRIPT_DIR -type d ! -empty -exec sh -c "
-  echo "fpath+={}" >> ~/.zshrc
-  echo added {} to fpath
-  " \;
-
-echo "autoload -Uz $SCRIPT_DIR/**/*(.:t)" >> ~/.zshrc
-echo "typeset -U fpath" >> ~/.zshrc
-source ~/.zshrc
+creek_git_each _creek_git_diff "$@"

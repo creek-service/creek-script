@@ -16,23 +16,14 @@
 # limitations under the License.
 #
 
-# Installs the Z-shell scripts onto the local machine
+# Determines the base dir for Creek repos.
+# This to the parent directory of the script repos.
+# But can be overridden by setting the CREEK_BASE_DIR env var.
 
-SCRIPT_DIR=${0:a:h}/zsh-functions
+if [[ -z $CREEK_BASE_DIR ]];
+then
+  echo "CREEK_BASE_DIR not set. Please set CREEK_BASE_DIR and try again" >&2
+  return 1
+fi
 
-echo >> ~/.zshrc
-echo "# Root directory containing Creek repos:" >> ~/.zshrc
-echo "CREEK_BASE_DIR=$(dirname $PWD)" >> ~/.zshrc
-echo "Set CREEK_BASE_DIR to $(dirname $PWD)"
-
-echo >> ~/.zshrc
-echo "# Install Creek functions:" >> ~/.zshrc
-
-find $SCRIPT_DIR -type d ! -empty -exec sh -c "
-  echo "fpath+={}" >> ~/.zshrc
-  echo added {} to fpath
-  " \;
-
-echo "autoload -Uz $SCRIPT_DIR/**/*(.:t)" >> ~/.zshrc
-echo "typeset -U fpath" >> ~/.zshrc
-source ~/.zshrc
+echo "$CREEK_BASE_DIR"
