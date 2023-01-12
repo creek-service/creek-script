@@ -1,0 +1,48 @@
+#!/bin/zsh
+
+#
+# Copyright 2022 Creek Contributors (https://github.com/creek-service)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Set the new release version on all released Creek repos
+# Parameters:
+#  1 - the next version, e.g. 1.2.4, or either Major / Minor
+
+if [ "$#" != "1" ];
+then
+	echo "Usage: $0 <semantic-version>"
+	return
+fi
+
+SEM_VER=$1
+
+# For each non-template Creek repo:
+for name in $(gh repo list creek-service --visibility public --no-archived --json nameWithOwner,isTemplate --jq '.[] | select( .isTemplate == false) | .nameWithOwner'); do
+  # Ignore release-test:
+  if [ "$name" = "creek-service/creek-release-test" ];
+  then
+      continue
+  fi
+
+  # Ignore repos that can't be released.
+  if ! (curl -f -s -L --head "http://github.com/$name/blob/main/.github/workflows/release.yml" > /dev/null);
+  then
+     continue
+  fi
+
+  echo "Invoking version workflow on $name with version $SEM_VER"
+  gh workflow run --repo "$name" version.yml -f part="$SEM_VER"
+done
+

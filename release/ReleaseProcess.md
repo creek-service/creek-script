@@ -16,19 +16,28 @@ should be tagged with the `chore` label, so that they do not show up in the rele
    This helps ensures all components use a consistent set of 3rd-party libraries.
 2. Ensure all Dependabot related PRs are building successfully and then merge.
    Dependabot PRs will be tagged with the `dependencies` label.
-3. Ensure each repo's current version is on the correct snapshot build
+3. Check all existing Creek publications for vulnerabilities on https://deps.dev/maven/, 
+   e.g. https://deps.dev/maven/org.creekservice%3Acreek-system-test-executor.
+   **NOTE**: the snakeYaml vulnerability `GHSA-mjmj-j48q-9wg2` can be ignored on the system-test publications,
+   as they are parsing trusted YAML files.
+4. For non-patch releases, set the next release version on all repos to be released:
+   ```shell
+   creek-set-next-version <version>
+   ```
+   e.g. `creek-set-next-version 0.4.0`
+5. Ensure each repo's current version is on the correct snapshot build
    ```shell
    mkdir tmp
    
    # Check out a fresh copy of each repo to a temp location
-   creek_gh_clone ./tmp ".github aggregate-template example-kafka-streams-aggregate multi-module-template simple-kafka-streams-tutorial single-module-template creek-script creek-release-test creek-service.github.io"
+   creek_gh_clone ./tmp ".github aggregate-template multi-module-template single-module-template basic-kafka-streams-demo creek-script creek-release-test creek-service.github.io creek-jekyll-theme"
    
    # Display each repos version:  
    CREEK_BASE_DIR="./tmp" creek_gradle_each ./gradlew cV -quiet
    
    rm -rf ./tmp
    ```
-5. For each Creek repo, in the following order:
+6. For each Creek repo, in the following order:
     1. `creek-test`
     2. `creek-base`
     3. `creek-observability` & `creek-platform`
@@ -36,7 +45,7 @@ should be tagged with the `chore` label, so that they do not show up in the rele
     5. `creek-json-schema-gradle-plugin` & `creek-system-test`
     6. `creek-system-test-gradle-plugin`
     7. all extension repos, e.g. `creek-kafka`
-6. ...follow these steps to release:
+7. ...follow these steps to release:
     1. Run GitHub dependency bot, e.g. the [creek-base dependency bot](https://github.com/creek-service/creek-base/network/updates)
        <br>This will generate a PR to update the version of other Creek components the repo depends on to the release build.
         1. Ignore any other non-Creek dependency update PRs for now.
