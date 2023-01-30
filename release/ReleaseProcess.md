@@ -12,20 +12,24 @@ should be tagged with the `chore` label, so that they do not show up in the rele
 
 ## Release steps
 
-1. Run Dependabot on all repos to check for updates to dependencies.
+1. Check [SonaType Lift](https://lift.sonatype.com/results/github.com/creek-service) and review:
+   1. issues: resolving / suppressing as required.
+   2. Dependency security vulnerabilities: Update transient dependencies where fixes exist.
+      Clear out older transient dependency bumps where no longer needed.
+      Note: the snakeYaml vulnerability `CVE-2022-1471` can be ignored on the system-test publications,
+      as they are parsing trusted YAML files.
+2. Check [Maven Deps](https://deps.dev/search?q=org.creekservice&system=maven&kind=PACKAGE) for similar to above.
+2. Check [Maven Deps](https://deps.dev/search?q=org.creekservice&system=maven&kind=PACKAGE) for similar to above.
+3. Run Dependabot on all repos to check for updates to dependencies.
    This helps ensures all components use a consistent set of 3rd-party libraries.
-2. Ensure all Dependabot related PRs are building successfully and then merge.
+4. Ensure all Dependabot related PRs are building successfully and then merge.
    Dependabot PRs will be tagged with the `dependencies` label.
-3. Check all existing Creek publications for vulnerabilities on https://deps.dev/maven/, 
-   e.g. https://deps.dev/maven/org.creekservice%3Acreek-system-test-executor.
-   **NOTE**: the snakeYaml vulnerability `GHSA-mjmj-j48q-9wg2` can be ignored on the system-test publications,
-   as they are parsing trusted YAML files.
-4. For non-patch releases, set the next release version on all repos to be released:
+5. For non-patch releases, set the next release version on all repos to be released:
    ```shell
    creek-set-next-version <version>
    ```
    e.g. `creek-set-next-version 0.4.0`
-5. Ensure each repo's current version is on the correct snapshot build
+6. Ensure each repo's current version is on the correct snapshot build
    ```shell
    mkdir tmp
    
@@ -37,7 +41,7 @@ should be tagged with the `chore` label, so that they do not show up in the rele
    
    rm -rf ./tmp
    ```
-6. For each Creek repo, in the following order:
+7. For each Creek repo, in the following order:
     1. `creek-test`
     2. `creek-base`
     3. `creek-observability` & `creek-platform`
@@ -45,12 +49,12 @@ should be tagged with the `chore` label, so that they do not show up in the rele
     5. `creek-json-schema-gradle-plugin` & `creek-system-test`
     6. `creek-system-test-gradle-plugin`
     7. all extension repos, e.g. `creek-kafka`
-7. ...follow these steps to release:
+8. ...follow these steps to release:
     1. Run GitHub dependency bot, e.g. the [creek-base dependency bot](https://github.com/creek-service/creek-base/network/updates)
        <br>This will generate a PR to update the version of other Creek components the repo depends on to the release build.
         1. Ignore any other non-Creek dependency update PRs for now.
            Merging them could result in inconsistent 3rd party library versions across the components.
-        2. label the Creek dependency PR with `chore` so that it is excluded from the release notes.
+        2. Label the Creek dependency PR with `chore` so that it is excluded from the release notes.
         3. Ensure the PR builds and then merge.
         4. Wait for the triggered `Build` on the `main` branch to complete.
     2. Run the `Release` workflow on GitHub e.g. [Creek test Release](https://github.com/creek-service/creek-test/actions/workflows/release.yml).
@@ -79,10 +83,12 @@ Once all components are released, follow these post release steps:
 5. ...follow these steps to update to the next snapshot:
     1. Run the e.g. the [creek-base dependency bot](https://github.com/creek-service/creek-base/network/updates)
        This will pick up the new snapshot build and create an appropriate PR.
-    2. Merge this PR once its green.
-6. Update  to the new release version:
-   by running [GitHub Dependabot](https://github.com/creek-service/aggregate-template/network/updates).
-   Merging all dependency PRs.
+    2. Label the PR with `chore` so that it is excluded from the release notes.
+    3. Merge this PR once its green.
+6. Announce on main doc site https://github.com/creek-service/creek-service.github.io
+   e.g. https://github.com/creek-service/creek-service.github.io/pull/11
+   1. Create a post announcing the new release.
+   2. Update `_pages/home.md` to reference new release version and announcement post.
 
 ## Notes on release process
 
