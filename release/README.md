@@ -16,40 +16,34 @@ should be tagged with the `chore` label, so that they do not show up in the rele
    1. issues: resolving / suppressing as required.
    2. Dependency security vulnerabilities: Update transient dependencies where fixes exist.
       Clear out older transient dependency bumps where no longer needed.
-      Note: the snakeYaml vulnerability `CVE-2022-1471` can be ignored on the system-test publications,
-      as they are parsing trusted YAML files.
-2. Check [Maven Deps](https://deps.dev/search?q=org.creekservice&system=maven&kind=PACKAGE) for similar to above.
 2. Check [Maven Deps](https://deps.dev/search?q=org.creekservice&system=maven&kind=PACKAGE) for similar to above.
 3. Run Dependabot on all repos to check for updates to dependencies.
    This helps ensures all components use a consistent set of 3rd-party libraries.
 4. Ensure all Dependabot related PRs are building successfully and then merge.
    Dependabot PRs will be tagged with the `dependencies` label.
-5. For non-patch releases, set the next release version on all repos to be released:
-   ```shell
-   creek-set-next-version <version>
-   ```
-   e.g. `creek-set-next-version 0.4.0`
-6. Ensure each repo's current version is on the correct snapshot build
-   ```shell
-   mkdir tmp
-   
-   # Check out a fresh copy of each repo to a temp location
-   creek_gh_clone ./tmp ".github aggregate-template multi-module-template single-module-template basic-kafka-streams-demo creek-script creek-release-test creek-service.github.io creek-jekyll-theme"
-   
-   # Display each repos version:  
-   CREEK_BASE_DIR="./tmp" creek_gradle_each ./gradlew cV -quiet
-   
-   rm -rf ./tmp
-   ```
-7. For each Creek repo, in the following order:
-    1. `creek-test`
-    2. `creek-base`
-    3. `creek-observability` & `creek-platform`
-    4. `creek-json-schema` & `creek-service`
-    5. `creek-json-schema-gradle-plugin` & `creek-system-test`
-    6. `creek-system-test-gradle-plugin`
-    7. all extension repos, e.g. `creek-kafka`
-8. ...follow these steps to release:
+5. For non-patch releases, set the next release version on all repos to be released, using the `Set Next Version`
+   workflow on GitHub.
+6. For each Creek repo, in the following order:
+    ```
+                               creek-test
+                                   |
+                               creek-base
+                                   |
+             ---------------------------------------------
+             |                     |                     |
+    creek-observability     creek-platform       creek-json-schema
+             |                     |                     |
+             -----------------------                     |
+                        |                                |
+                   creek-service           creek-json-schema-gradle-plugin
+                        |
+                creek-system-test
+                        |
+                        --------------------------------------
+                        |                                    |
+            creek-kafka & all extensions      creek-system-test-gradle-plugin
+    ```
+7. ...follow these steps to release:
     1. Run GitHub dependency bot, e.g. the [creek-base dependency bot](https://github.com/creek-service/creek-base/network/updates)
        <br>This will generate a PR to update the version of other Creek components the repo depends on to the release build.
         1. Ignore any other non-Creek dependency update PRs for now.
@@ -73,13 +67,26 @@ Once all components are released, follow these post release steps:
 3. For `creek-test`, commit a small change, e.g. a newline in a doc.
    This will trigger a new snapshot build to be created.
    Once build...
-4. For each Creek repo, in the following order:
-    1. `creek-base`
-    2. `creek-observability` & `creek-platform` & `single-module-template` & `double-module-template`
-    3. `creek-json-schema` & `creek-service`
-    4. `creek-json-schema-gradle-plugin` & `creek-system-test`
-    5. `creek-system-test-gradle-plugin`
-    6. all extension repos, e.g. `creek-kafka`
+4. For each Creek repo, in the same order as above, namely
+   ```
+                               creek-test
+                                   |
+                               creek-base
+                                   |
+             ---------------------------------------------
+             |                     |                     |
+    creek-observability     creek-platform       creek-json-schema
+             |                     |                     |
+             -----------------------                     |
+                        |                                |
+                   creek-service           creek-json-schema-gradle-plugin
+                        |
+                creek-system-test
+                        |
+                        --------------------------------------
+                        |                                    |
+            creek-kafka & all extensions      creek-system-test-gradle-plugin
+    ```
 5. ...follow these steps to update to the next snapshot:
     1. Run the e.g. the [creek-base dependency bot](https://github.com/creek-service/creek-base/network/updates)
        This will pick up the new snapshot build and create an appropriate PR.

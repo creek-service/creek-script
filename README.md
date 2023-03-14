@@ -1,7 +1,7 @@
 # creek-script
 
 Scripts and docs for working with Creek Service repositories. 
-Oh, and document the [Creek release process](release/ReleaseProcess.md).
+Oh, and document the [Creek release process](release/README.md).
 
 ## Installation
 
