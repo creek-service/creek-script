@@ -18,5 +18,6 @@
 
 # Run the supplied command in each local Creek repo that utilises Gradle as a build tool
 # For example run `creek_gradle_each ./gradlew cV -quiet` to output the current version of each repo.
+# For example run `creek_gradle_each "gradle wrapper --gradle-version 8.0.2"` to update all gradle projects to a new version of Gradle
 
 CREEK_EACH_EXCLUDE="creek-script creek-service.github.io" creek_git_each "$@"
