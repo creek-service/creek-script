@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 #
-# Copyright 2022 Creek Contributors (https://github.com/creek-service)
+# Copyright 2022-2023 Creek Contributors (https://github.com/creek-service)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ do
     continue;
   fi
 
+  echo "------- $(basename "$repo") -------------------"
   if ! OUTPUT=$(eval "(cd $repo && $*)");
   then
       return 1
@@ -45,7 +46,6 @@ do
 
   if [ "$OUTPUT" != "" ];
   then
-    echo "------- $(basename "$repo") -------------------"
     echo "$OUTPUT"
     echo
   fi
