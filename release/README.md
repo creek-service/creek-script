@@ -60,14 +60,10 @@ should be tagged with the `chore` label, so that they do not show up in the rele
 
 Once all components are released, follow these post release steps:
 
-1. Update `aggregate-template` to the new release version
-   by running [GitHub Dependabot](https://github.com/creek-service/aggregate-template/network/updates).
-   Merging all dependency PRs.
-2. Do the same steps as above for all tutorials. [Need a way to automate this!](https://github.com/dependabot/dependabot-core/issues/6098)
-3. For `creek-test`, commit a small change, e.g. a newline in a doc.
+1. For `creek-test`, commit a small change, e.g. a newline in a doc.
    This will trigger a new snapshot build to be created.
    Once build...
-4. For each Creek repo, in the same order as above, namely
+2. For each Creek repo, in the same order as above, namely
    ```
                                creek-test
                                    |
@@ -86,13 +82,16 @@ Once all components are released, follow these post release steps:
                         --------------------------------------
                         |                                    |
             creek-kafka & all extensions      creek-system-test-gradle-plugin
+                        |                                    |
+                        --------------------------------------
+                                           |
+                               multi & single-module-template     
     ```
-5. ...follow these steps to update to the next snapshot:
-    1. Run the e.g. the [creek-base dependency bot](https://github.com/creek-service/creek-base/network/updates)
-       This will pick up the new snapshot build and create an appropriate PR.
+3. ...follow these steps to update to the next snapshot:
+    1. Manually change the version to the new snapshot (Dependabot is broken for snapshot releases :'( ).
     2. Label the PR with `chore` so that it is excluded from the release notes.
     3. Merge this PR once its green.
-6. Announce on main doc site https://github.com/creek-service/creek-service.github.io
+4. Announce on main doc site https://github.com/creek-service/creek-service.github.io
    e.g. https://github.com/creek-service/creek-service.github.io/pull/11
    1. Create a post announcing the new release.
    2. Update `_pages/home.md` to reference new release version and announcement post.
