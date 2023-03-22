@@ -38,14 +38,16 @@ do
     continue;
   fi
 
-  echo "------- $(basename "$repo") -------------------"
   if ! OUTPUT=$(eval "(cd $repo && $*)");
   then
+      echo "------- $(basename "$repo") -------------------"
+      echo "$OUTPUT"
       return 1
   fi
 
   if [ "$OUTPUT" != "" ];
   then
+    echo "------- $(basename "$repo") -------------------"
     echo "$OUTPUT"
     echo
   fi
