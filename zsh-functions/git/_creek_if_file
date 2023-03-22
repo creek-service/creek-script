@@ -16,8 +16,17 @@
 # limitations under the License.
 #
 
-# Run the supplied command in each local Creek repo that utilises Gradle as a build tool
-# For example run `creek_gradle_each ./gradlew cV -quiet` to output the current version of each repo.
-# For example run `creek_gradle_each "gradle wrapper --gradle-version 8.0.2"` to update all gradle projects to a new version of Gradle
+# If the file passed in the file arg exists, execute the command passed in the subsequent commands
+# For example run `_creek_if_file ".github/workflows/version.yml" /gradlew cV -quiet`.
 
-creek_git_each _creek_if_file "gradlew" "$@"
+if [ "$#" = "0" ]; then
+	echo "$0 <file to check> <commands to run if file exists...>"
+	exit 1
+fi
+
+FILE=$1
+shift
+
+if [[ -f "$FILE" ]]; then
+    "$@"
+fi
