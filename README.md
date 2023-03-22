@@ -47,10 +47,10 @@ CREEK_EACH_EXCLUDE="creek-script creek-service.github.io" creek_git_each git dif
 Runs the supplied commands against each Creek repo in turn. For example:
 
 ```shell
-creek_git_each git status
+creek_gradle_each "gradle wrapper --gradle-version 8.0.2"
 ```
 
-...runs `git status` on each repo.
+...upgrades each Gradle based repo to a new version of Gradle.
 
 #### creek_git_diff
 
