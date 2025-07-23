@@ -29,13 +29,13 @@ should be tagged with the `chore` label, so that they do not show up in the rele
                                    |
                                creek-base
                                    |
-             ---------------------------------------------
-             |                     |                     |
-    creek-observability     creek-platform       creek-json-schema
-             |                     |                     |
-             -----------------------                     |
+                        ---------------------------------
+                        |                               |
+                creek-observability              creek-json-schema
                         |                                |
-                   creek-service           creek-json-schema-gradle-plugin
+                  creek-platform            creek-json-schema-gradle-plugin
+                        |                   
+                   creek-service           
                         |
                 creek-system-test
                         |
@@ -60,13 +60,13 @@ Once all components are released, follow these post-release steps:
                                    |
                                creek-base
                                    |
-             ---------------------------------------------
-             |                     |                     |
-    creek-observability     creek-platform       creek-json-schema
-             |                     |                     |
-             -----------------------                     |
+                        ---------------------------------
+                        |                               |
+                creek-observability              creek-json-schema
                         |                                |
-                   creek-service           creek-json-schema-gradle-plugin
+                  creek-platform            creek-json-schema-gradle-plugin
+                        |                   
+                   creek-service           
                         |
                 creek-system-test
                         |
