@@ -79,9 +79,8 @@ Once all components are released, follow these post-release steps:
                                multi & single-module-template     
     ```
 2. follow these steps the next snapshot build to be built
-    1. Create a PR with a small change, a newline in a doc.
-    2. Label the PR with `chore` so that it is excluded from the release notes.
-    3. Merge this PR once it's green.
+    1. Run the "Set next version" workflow with `part` set to `patch`.
+    2. Ensure workflow, and triggered `build` workflow complete successfully.
 3. Announce on main doc site https://github.com/creek-service/creek-service.github.io
    e.g. https://github.com/creek-service/creek-service.github.io/pull/11
    1. Create a post announcing the new release.
