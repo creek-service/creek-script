@@ -1,0 +1,144 @@
+#!/bin/zsh
+
+#
+# Copyright 2022-2025 Creek Contributors (https://github.com/creek-service)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Fetches all open creek-service PR notifications, re-runs failed CI checks,
+# and squash-merges PRs that pass. Processes each repo sequentially, all repos in parallel.
+# Logs per-PR results to $LOG_DIR.
+#
+# Usage: creek_rebuild_prs
+# Requires: gh CLI authenticated with creek-service org access
+
+local LOG_DIR="/tmp/creek_pr_logs"
+local NOTIFS_FILE="/tmp/creek_pr_notifs.tsv"
+local TIMEOUT_SECS=3600
+
+mkdir -p "$LOG_DIR"
+
+_creek_rebuild_pr_log() {
+  local log_file="$1" context="$2"; shift 2
+  echo "[$(date '+%H:%M:%S')] [$context] $*" >> "$log_file"
+}
+
+_creek_rebuild_fetch_notifications() {
+  echo "Fetching open creek-service PR notifications..."
+  gh api "notifications?all=false" --paginate \
+    | jq -r '.[] | select(.subject.type == "PullRequest") | select(.repository.full_name | startswith("creek-service/")) | .repository.full_name + "\t" + .id + "\t" + .subject.url + "\t" + .subject.title' \
+    | sort > "$NOTIFS_FILE"
+  echo "Found $(wc -l < "$NOTIFS_FILE" | tr -d ' ') PR notifications across $(cut -f1 "$NOTIFS_FILE" | sort -u | wc -l | tr -d ' ') repos."
+}
+
+_creek_rebuild_process_pr() {
+  local repo="$1" notif_id="$2" pr_url="$3" title="$4"
+  local pr_num=$(basename "$pr_url")
+  local log="$LOG_DIR/${repo//\//_}_${pr_num}.log"
+  local context="$repo #$pr_num"
+
+  _creek_rebuild_pr_log "$log" "$context" "START: $title"
+
+  local pr_state=$(gh api "$pr_url" --jq '.state' 2>/dev/null)
+  if [[ "$pr_state" != "open" ]]; then
+    _creek_rebuild_pr_log "$log" "$context" "PR is $pr_state, skipping"
+    gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
+    return 0
+  fi
+
+  local head_sha=$(gh api "$pr_url" --jq '.head.sha' 2>/dev/null)
+
+  local rerun_count=0
+  while IFS= read -r run_id; do
+    _creek_rebuild_pr_log "$log" "$context" "Re-running failed run $run_id"
+    gh api --method POST "repos/$repo/actions/runs/$run_id/rerun-failed-jobs" --silent 2>/dev/null || \
+    gh api --method POST "repos/$repo/actions/runs/$run_id/rerun" --silent 2>/dev/null || true
+    (( ++rerun_count ))
+  done < <(gh api "repos/$repo/actions/runs?head_sha=$head_sha&per_page=100" \
+    --jq '.workflow_runs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | .id' 2>/dev/null)
+
+  if (( rerun_count > 0 )); then
+    sleep 60
+  fi
+
+  local waited=0
+  while (( waited < TIMEOUT_SECS )); do
+    local checks=$(gh pr checks "$pr_num" --repo "$repo" 2>/dev/null)
+    local pending=$(echo "$checks" | grep -cE '\s+(pending|in_progress|queued)\s' || true)
+    local failing=$(echo "$checks" | grep -cE '\s+fail\s' || true)
+
+    if (( pending > 0 )); then
+      _creek_rebuild_pr_log "$log" "$context" "Waiting... ($pending pending, ${waited}s elapsed)"
+      sleep 30
+      (( waited += 30 ))
+      continue
+    fi
+
+    if (( failing == 0 )); then
+      _creek_rebuild_pr_log "$log" "$context" "All checks passed! Merging..."
+      local merge_out
+      if merge_out=$(gh pr merge "$pr_num" --repo "$repo" --squash --delete-branch 2>&1); then
+        _creek_rebuild_pr_log "$log" "$context" "Merged successfully"
+        gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
+        _creek_rebuild_pr_log "$log" "$context" "Notification marked as done"
+      elif echo "$merge_out" | grep -q "not up to date"; then
+        _creek_rebuild_pr_log "$log" "$context" "Branch behind base, updating..."
+        if gh api --method PUT "repos/$repo/pulls/$pr_num/update-branch" --silent 2>/dev/null; then
+          sleep 30
+          if merge_out=$(gh pr merge "$pr_num" --repo "$repo" --squash --delete-branch 2>&1); then
+            _creek_rebuild_pr_log "$log" "$context" "Merged after update"
+            gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
+            _creek_rebuild_pr_log "$log" "$context" "Notification marked as done"
+          else
+            _creek_rebuild_pr_log "$log" "$context" "Merge failed after update: $merge_out"
+          fi
+        else
+          _creek_rebuild_pr_log "$log" "$context" "Branch update failed"
+        fi
+      else
+        _creek_rebuild_pr_log "$log" "$context" "Merge failed: $merge_out"
+      fi
+    else
+      _creek_rebuild_pr_log "$log" "$context" "Checks still failing, skipping (${failing} failures)"
+    fi
+    return 0
+  done
+
+  _creek_rebuild_pr_log "$log" "$context" "TIMEOUT after ${waited}s"
+}
+
+_creek_rebuild_process_repo() {
+  local repo="$1"
+  echo "=== Starting repo: $repo ===" >> "$LOG_DIR/summary.log"
+  while IFS=$'\t' read -r r notif_id pr_url title; do
+    _creek_rebuild_process_pr "$repo" "$notif_id" "$pr_url" "$title"
+  done < <(grep "^${repo}"$'\t' "$NOTIFS_FILE")
+  echo "=== Done with repo: $repo ===" >> "$LOG_DIR/summary.log"
+}
+
+_creek_rebuild_fetch_notifications
+
+> "$LOG_DIR/summary.log"
+local repos=$(cut -f1 "$NOTIFS_FILE" | sort -u)
+
+for repo in ${(f)repos}; do
+  _creek_rebuild_process_repo "$repo" &
+done
+wait
+
+echo "ALL DONE" >> "$LOG_DIR/summary.log"
+
+echo ""
+echo "=== Summary ==="
+grep -h "Merged successfully\|Merged after update\|Merge failed\|still failing\|TIMEOUT\|PR is" /tmp/creek_pr_logs/*.log 2>/dev/null | sort
