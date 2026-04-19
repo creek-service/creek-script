@@ -44,12 +44,18 @@ The failure is specific to CodeQL because:
 
 ## Fix
 
-Added to `gradle.properties` in each affected repo:
+**Important:** `buildSrc` is a separate isolated Gradle build — it does **not** inherit
+the root project's `gradle.properties`. The setting must go in `buildSrc/gradle.properties`.
+
+Created `buildSrc/gradle.properties` in each affected repo with:
 
 ```properties
 # Increase Kotlin daemon heap to avoid OOM during buildSrc compilation with Gradle 9
 kotlin.daemon.jvmargs=-Xmx2g
 ```
+
+Also removed the incorrect `kotlin.daemon.jvmargs` that was mistakenly added to the root
+`gradle.properties` in the first fix attempt.
 
 This should also be applied to `main` branches across all Creek repos as a proactive
 measure, since any repo upgrading to Gradle 9 in future will hit the same issue.
