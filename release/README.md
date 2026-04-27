@@ -1,90 +1,89 @@
 # Release process
 
-The process of building a new release and publishing to Maven Central is currently a partly manual process.
-
 Each project has a `Release` GitHub workflow that will push a release tag to the repo.
 The pushing of the release tag will trigger a build, which will build and upload artifacts and create a GitHub release.
 
-What is not currently automated is the updating of Creek's internal dependencies, e.g., once `creek-base` is released,
-updating other projects that depend on it to the new release version. This needs to be done manually.
-PRs to switch to release dependencies prior to release, and to the new snapshot after release,
-should be tagged with the `chore` label, so that they do not show up in the release notes.
+## Pre-Release steps
 
-## Release steps
+### Preparing core repos
 
-1. Check [SonaType Lift](https://lift.sonatype.com/results/github.com/creek-service) and review:
-   1. issues: resolving / suppressing as required.
-   2. Dependency security vulnerabilities: Update transient dependencies where fixes exist.
-      Clear out older transient dependency bumps where no longer needed.
-2. Check [Maven Deps](https://deps.dev/search?q=org.creekservice&system=maven&kind=PACKAGE) for similar to above.
-3. Run Dependabot on all repos to check for updates to dependencies.
-   This helps ensure all components use a consistent set of third-party libraries.
-4. Ensure all Dependabot related PRs are building successfully and then merge.
-   Dependabot PRs will be tagged with the `dependencies` label.
-5. For non-patch releases, set the next release version on all repos to be released, using the `Set Next Version`
-   workflow on GitHub.
-6. For each Creek repo, in the following order:
-    ```
-                               creek-test
-                                   |
-                               creek-base
-                                   |
-                        ---------------------------------
-                        |                               |
-                creek-observability              creek-json-schema
-                        |                                |
-                  creek-platform            creek-json-schema-gradle-plugin
-                        |                   
-                   creek-service           
-                        |
-                creek-system-test
-                        |
-                        --------------------------------------
-                        |                                    |
-            creek-kafka & all extensions      creek-system-test-gradle-plugin
-    ```
-7. ...follow these steps to release:
-    1. Run the `Release` workflow on GitHub e.g. [Creek test Release](https://github.com/creek-service/creek-test/actions/workflows/release.yml).
-    2. Ensure the `Release` workflow, and the triggered `Build` workflow on the release tag, complete successfully.
-    3. Ensure artifacts are correctly published to the [Sona Type Nexus](https://central.sonatype.com/search?q=org.creekservice)
-    4. Ensure artifacts are later available on Maven Central.
-    5. Ensure Gradle plugins are published to the Gradle Plugin Portal, e.g. [org.creekservice.schema.json](https://plugins.gradle.org/plugin/org.creekservice.schema.json)
+1. Run Dependabot checks across all core repos and ensure all Dependabot PRs are merged and the main branch build has passed.
+2. Check all core repos for open security vulnerabilities, e.g. under https://github.com/creek-service/creek-system-test-gradle-plugin/security/dependabot and abort the release if any are found.
+3. Verify the main build of all core repos are building successfully on Github
+4. For non-patch releases, run the 'Set Next Version' workflow on all core repos in parallel, setting the part to either `minor` or `major`, as requested by the user. Wait for the workflows to complete and verify success. .
+5. Verify all core repos now have the correct version set in their root Gradle build file.
 
-## Post-release steps
+### Verifying demos work
 
-Once all components are released, follow these post-release steps:
+For each demo repo:
 
-1. For each Creek repo, in the same order as above, namely
-   ```
-                               creek-test
-                                   |
-                               creek-base
-                                   |
-                        ---------------------------------
-                        |                               |
-                creek-observability              creek-json-schema
-                        |                                |
-                  creek-platform            creek-json-schema-gradle-plugin
-                        |                   
-                   creek-service           
-                        |
-                creek-system-test
-                        |
-                        --------------------------------------
-                        |                                    |
-            creek-kafka & all extensions      creek-system-test-gradle-plugin
-                        |                                    |
-                        --------------------------------------
-                                           |
-                               multi & single-module-template     
-    ```
-2. follow these steps the next snapshot build to be built
-    1. Run the "Set next version" workflow with `part` set to `patch`.
-    2. Ensure workflow, and triggered `build` workflow complete successfully.
-3. Announce on main doc site https://github.com/creek-service/creek-service.github.io
-   e.g. https://github.com/creek-service/creek-service.github.io/pull/11
-   1. Create a post announcing the new release.
-   2. Update `_pages/home.md` to reference new release version and announcement post.
+1. Create a WIP PR that updates the version of creek, including creek plugin versions, to the current snapshot version.
+2. Verify the PR builds successfully on GitHub. If not, inform the user and await instructions.
+
+## Release Execution Phase
+
+Follow the strict dependency order:
+
+```
+                           creek-test
+                               |
+                           creek-base
+                               |
+                    ---------------------------------
+                    |                               |
+            creek-observability              creek-json-schema
+                    |                                |
+              creek-platform            creek-json-schema-gradle-plugin
+                    |                   
+               creek-service           
+                    |
+            creek-system-test
+                    |
+                    --------------------------------------
+                    |                                    |
+        creek-kafka & all extensions      creek-system-test-gradle-plugin
+```
+
+For each repo in order:
+1. Trigger the 'Release' workflow on GitHub using `gh workflow run`
+2. Monitor workflow completion and verify success
+3. The 'Release' workflow will push a tag, causing a new 'Build' to be triggered on the `main` branch: monitor the main build workflow and verify success.
+4. Verify the new version is published to Sonatype Nexus (https://central.sonatype.com/search?q=org.creekservice) (can take several minutes after Nexus publication)
+5. For Gradle plugins, verify the new version is published to Gradle Plugin Portal (https://plugins.gradle.org/search?term=org.creekservice) (can take several minutes after Nexus publication)
+6. Do NOT proceed to the next repo until the current repo is fully verified
+
+### Parallelization Opportunities
+
+- creek-observability and creek-json-schema can be released in parallel
+- creek-platform and creek-json-schema-gradle-plugin can be released in parallel
+- creek-kafka and extensions can be released in parallel
+- Wait for parent repos before releasing dependents
+
+## Post-Release Phase
+
+### Bump Creek version in demo repos to new release
+
+For each demo repo:
+1. Find the WIP PR that bumps the creek version to the snapshot version
+2. Update the PR, including title and description, to bump the version to the newly released version of creek, including plugins.
+3. Verify the demo repo builds successfully on GitHub. If not, inform the user and await instructions.
+4. Mark the PR as ready for review.
+5. Merge the PR.
+
+### Bump Core repos to next snapshot version:
+
+Follow the same project dependency order as release, for each core repo:
+1. Run 'Set next version' workflow with `part` set to `patch`
+2. Verify workflow completion and triggered `main` `Build` success
+3. Include post-release repos (multi-module-template, single-module-template)
+4. Update documentation site (https://github.com/creek-service/creek-service.github.io):
+    - Create announcement post
+    - Update _pages/home.md with new release version and announcement link
+
+### Post-Release Validation
+
+- Verify all repos have snapshot versions set
+- Confirm documentation updated with new release
 
 ## Notes on the release process
 
