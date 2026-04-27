@@ -6,5 +6,8 @@ gradle-app.setting
 
 .idea
 
+# Claude
+.claude/plans/
+
 # Apple
 **/.DS_Store

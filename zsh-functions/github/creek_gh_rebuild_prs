@@ -16,52 +16,40 @@
 # limitations under the License.
 #
 
-# Fetches all open creek-service PR notifications, re-runs failed CI checks,
-# and squash-merges PRs that pass. Processes each repo sequentially, all repos in parallel.
-# Logs per-PR results to $LOG_DIR.
+# Queries all open creek-service repos and their open PRs, updates each PR branch
+# with main, re-runs failed CI checks, and squash-merges PRs that pass.
+# Processes repos in parallel, PRs within each repo sequentially.
 #
-# Usage: creek_rebuild_prs
+# Usage: creek_gh_rebuild_prs
 # Requires: gh CLI authenticated with creek-service org access
 
-local LOG_DIR="/tmp/creek_pr_logs"
-local NOTIFS_FILE="/tmp/creek_pr_notifs.tsv"
-local TIMEOUT_SECS=3600
-
-mkdir -p "$LOG_DIR"
-
-_creek_rebuild_pr_log() {
-  local log_file="$1" context="$2"; shift 2
-  echo "[$(date '+%H:%M:%S')] [$context] $*" >> "$log_file"
-}
-
-_creek_rebuild_fetch_notifications() {
-  echo "Fetching open creek-service PR notifications..."
-  gh api "notifications?all=false" --paginate \
-    | jq -r '.[] | select(.subject.type == "PullRequest") | select(.repository.full_name | startswith("creek-service/")) | .repository.full_name + "\t" + .id + "\t" + .subject.url + "\t" + .subject.title' \
-    | sort > "$NOTIFS_FILE"
-  echo "Found $(wc -l < "$NOTIFS_FILE" | tr -d ' ') PR notifications across $(cut -f1 "$NOTIFS_FILE" | sort -u | wc -l | tr -d ' ') repos."
-}
+setopt LOCAL_OPTIONS
+unsetopt XTRACE
 
 _creek_rebuild_process_pr() {
-  local repo="$1" notif_id="$2" pr_url="$3" title="$4"
-  local pr_num=$(basename "$pr_url")
-  local log="$LOG_DIR/${repo//\//_}_${pr_num}.log"
-  local context="$repo #$pr_num"
+  local repo="$1" pr_num="$2" title="$3"
+  local context="https://github.com/$repo/pull/$pr_num"
+  local log() { echo "[$(date '+%H:%M:%S')] [$context] $*" }
 
-  _creek_rebuild_pr_log "$log" "$context" "START: $title"
+  log "START: $title"
 
-  local pr_state=$(gh api "$pr_url" --jq '.state' 2>/dev/null)
-  if [[ "$pr_state" != "open" ]]; then
-    _creek_rebuild_pr_log "$log" "$context" "PR is $pr_state, skipping"
-    gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
-    return 0
+  # Ensure branch is up to date with main before doing anything
+  local update_out
+  if update_out=$(gh api --method PUT "repos/$repo/pulls/$pr_num/update-branch" 2>&1); then
+    log "Branch updated with main, waiting for CI to register..."
+    sleep 30
+  elif echo "$update_out" | grep -qiE "already up.to.date|up to date|no new commits"; then
+    log "Branch already up to date with main"
+  else
+    log "Branch update failed: $update_out"
   fi
 
-  local head_sha=$(gh api "$pr_url" --jq '.head.sha' 2>/dev/null)
+  local head_sha=$(gh api "repos/$repo/pulls/$pr_num" --jq '.head.sha' 2>/dev/null)
 
+  # Re-run any failed/cancelled workflow runs
   local rerun_count=0
   while IFS= read -r run_id; do
-    _creek_rebuild_pr_log "$log" "$context" "Re-running failed run $run_id"
+    log "Re-running failed run $run_id"
     gh api --method POST "repos/$repo/actions/runs/$run_id/rerun-failed-jobs" --silent 2>/dev/null || \
     gh api --method POST "repos/$repo/actions/runs/$run_id/rerun" --silent 2>/dev/null || true
     (( ++rerun_count ))
@@ -69,76 +57,153 @@ _creek_rebuild_process_pr() {
     --jq '.workflow_runs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | .id' 2>/dev/null)
 
   if (( rerun_count > 0 )); then
+    log "Triggered $rerun_count re-run(s), waiting for CI to register..."
     sleep 60
   fi
 
-  local waited=0
-  while (( waited < TIMEOUT_SECS )); do
+  # Poll until all checks complete.
+  while true; do
     local checks=$(gh pr checks "$pr_num" --repo "$repo" 2>/dev/null)
-    local pending=$(echo "$checks" | grep -cE '\s+(pending|in_progress|queued)\s' || true)
+    local queued=$(echo "$checks" | grep -cE '\s+(pending|queued)\s' || true)
+    local running=$(echo "$checks" | grep -cE '\s+in_progress\s' || true)
     local failing=$(echo "$checks" | grep -cE '\s+fail\s' || true)
 
-    if (( pending > 0 )); then
-      _creek_rebuild_pr_log "$log" "$context" "Waiting... ($pending pending, ${waited}s elapsed)"
+    if (( queued > 0 && running == 0 )); then
+      log "Queued... ($queued queued)"
       sleep 30
-      (( waited += 30 ))
+      continue
+    fi
+
+    if (( queued > 0 || running > 0 )); then
+      log "Running... ($running running, $queued queued)"
+      sleep 30
       continue
     fi
 
     if (( failing == 0 )); then
-      _creek_rebuild_pr_log "$log" "$context" "All checks passed! Merging..."
+      log "All checks passed! Merging..."
       local merge_out
       if merge_out=$(gh pr merge "$pr_num" --repo "$repo" --squash --delete-branch 2>&1); then
-        _creek_rebuild_pr_log "$log" "$context" "Merged successfully"
-        gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
-        _creek_rebuild_pr_log "$log" "$context" "Notification marked as done"
-      elif echo "$merge_out" | grep -q "not up to date"; then
-        _creek_rebuild_pr_log "$log" "$context" "Branch behind base, updating..."
-        if gh api --method PUT "repos/$repo/pulls/$pr_num/update-branch" --silent 2>/dev/null; then
-          sleep 30
-          if merge_out=$(gh pr merge "$pr_num" --repo "$repo" --squash --delete-branch 2>&1); then
-            _creek_rebuild_pr_log "$log" "$context" "Merged after update"
-            gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
-            _creek_rebuild_pr_log "$log" "$context" "Notification marked as done"
-          else
-            _creek_rebuild_pr_log "$log" "$context" "Merge failed after update: $merge_out"
-          fi
-        else
-          _creek_rebuild_pr_log "$log" "$context" "Branch update failed"
-        fi
+        log "Merged successfully"
       else
-        _creek_rebuild_pr_log "$log" "$context" "Merge failed: $merge_out"
+        log "Merge failed: $merge_out"
       fi
     else
-      _creek_rebuild_pr_log "$log" "$context" "Checks still failing, skipping (${failing} failures)"
+      log "Checks still failing, skipping (${failing} failures)"
     fi
     return 0
   done
+}
 
-  _creek_rebuild_pr_log "$log" "$context" "TIMEOUT after ${waited}s"
+_creek_rebuild_check_main() {
+  local repo="$1"
+  local log() { echo "[$(date '+%H:%M:%S')] [$repo main] $*" }
+
+  local main_sha=$(gh api "repos/$repo/git/ref/heads/main" --jq '.object.sha' 2>/dev/null)
+  if [[ -z "$main_sha" ]]; then
+    log "Could not resolve main branch SHA, skipping repo"
+    return 1
+  fi
+
+  # Check if all existing runs on main's HEAD are already green
+  local non_green=$(gh api "repos/$repo/actions/runs?head_sha=$main_sha&per_page=100" \
+    --jq '.workflow_runs[] | select(.name == "Build") | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | .id' 2>/dev/null)
+
+  if [[ -z "$non_green" ]]; then
+    # Confirm there are actually some successful runs (not just zero runs)
+    local any=$(gh api "repos/$repo/actions/runs?head_sha=$main_sha&per_page=100" \
+      --jq '[.workflow_runs[] | select(.name == "Build")] | length' 2>/dev/null)
+    if [[ "$any" -gt 0 ]]; then
+      log "Main Build is green"
+      return 0
+    fi
+  fi
+
+  # Trigger a fresh Build workflow run on main
+  local workflow_id=$(gh api "repos/$repo/actions/workflows" \
+    --jq '.workflows[] | select(.name == "Build") | .id' 2>/dev/null)
+
+  if [[ -z "$workflow_id" ]]; then
+    log "No 'Build' workflow found, skipping repo"
+    return 1
+  fi
+
+  log "Triggering new main Build..."
+  if ! gh api --method POST "repos/$repo/actions/workflows/$workflow_id/dispatches" \
+      -f ref=main -f 'inputs[publish_artifacts]=true' --silent 2>/dev/null; then
+    log "Failed to trigger main Build, skipping repo"
+    return 1
+  fi
+
+  log "Main Build triggered, waiting for CI to register..."
+  sleep 60
+
+  # Poll main Build workflow
+  while true; do
+    local statuses=$(gh api "repos/$repo/actions/workflows/$workflow_id/runs?head_sha=$main_sha&per_page=5" \
+      --jq '.workflow_runs[] | .status + " " + (.conclusion // "null")' 2>/dev/null)
+
+    local queued=$(echo "$statuses" | grep -cE '^(queued|waiting|pending) ' || true)
+    local running=$(echo "$statuses" | grep -cE '^in_progress ' || true)
+    local failed=$(echo "$statuses" | grep -vE '(success|skipped|neutral|null)$' | grep -cE ' (failure|cancelled|timed_out|action_required)$' || true)
+    local incomplete=$(echo "$statuses" | grep -cE ' null$' || true)
+
+    if (( queued > 0 && running == 0 && incomplete == 0 )); then
+      log "Main build queued..."
+      sleep 30
+      continue
+    fi
+
+    if (( running > 0 || incomplete > 0 )); then
+      log "Main build running... ($running running, $queued queued)"
+      sleep 30
+      continue
+    fi
+
+    if (( failed > 0 )); then
+      log "Main build failed, skipping all PRs"
+      return 1
+    fi
+
+    log "Main is green"
+    return 0
+  done
 }
 
 _creek_rebuild_process_repo() {
   local repo="$1"
-  echo "=== Starting repo: $repo ===" >> "$LOG_DIR/summary.log"
-  while IFS=$'\t' read -r r notif_id pr_url title; do
-    _creek_rebuild_process_pr "$repo" "$notif_id" "$pr_url" "$title"
-  done < <(grep "^${repo}"$'\t' "$NOTIFS_FILE")
-  echo "=== Done with repo: $repo ===" >> "$LOG_DIR/summary.log"
+  local prs
+  prs=$(gh pr list --repo "$repo" --state open --json number,title \
+    --jq '.[] | (.number | tostring) + "\t" + .title' 2>/dev/null \
+    | awk 'BEGIN{srand()} {print rand() "\t" $0}' | sort -n | cut -f2-)
+
+  [[ -z "$prs" ]] && return 0
+
+  _creek_rebuild_check_main "$repo" || return 0
+
+  while IFS=$'\t' read -r pr_num title; do
+    _creek_rebuild_process_pr "$repo" "$pr_num" "$title"
+  done <<< "$prs"
 }
 
-_creek_rebuild_fetch_notifications
+echo "Fetching creek-service repos..."
+local repos
+if ! repos=$(gh repo list creek-service --limit 2000 --no-archived --json nameWithOwner \
+    --jq '.[].nameWithOwner' 2>/dev/null); then
+  echo "Failed to fetch repos" >&2
+  return 1
+fi
 
-> "$LOG_DIR/summary.log"
-local repos=$(cut -f1 "$NOTIFS_FILE" | sort -u)
+local repo_count=$(echo "$repos" | wc -l | tr -d ' ')
+echo "Processing $repo_count repos in parallel..."
 
-for repo in ${(f)repos}; do
-  _creek_rebuild_process_repo "$repo" &
-done
-wait
-
-echo "ALL DONE" >> "$LOG_DIR/summary.log"
+(
+  trap 'echo ""; echo "Interrupted — stopping all repo jobs..."; kill 0' INT TERM
+  for repo in ${(f)repos}; do
+    _creek_rebuild_process_repo "$repo" &
+  done
+  wait
+)
 
 echo ""
-echo "=== Summary ==="
-grep -h "Merged successfully\|Merged after update\|Merge failed\|still failing\|TIMEOUT\|PR is" /tmp/creek_pr_logs/*.log 2>/dev/null | sort
+echo "Done."

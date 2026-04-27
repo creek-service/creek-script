@@ -82,3 +82,17 @@ For example, the following lists only the name of changed and untracked files:
 
 The `?? diff.txt` shows an untracked file in the `creek-json-schema` repo.
 Two other repos have differences.
+
+### GitHub
+
+#### creek_gh_clean_notifications
+
+Deletes all GitHub notifications for closed or merged PRs.
+
+```shell
+creek_gh_clean_notifications
+```
+
+#### creek_gh_rebuild_prs
+
+Run to rebuild all open PRs in all Creek repos.

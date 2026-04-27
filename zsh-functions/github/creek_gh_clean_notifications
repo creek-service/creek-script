@@ -1,0 +1,54 @@
+#!/bin/zsh
+
+#
+# Copyright 2022-2025 Creek Contributors (https://github.com/creek-service)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Iterates all GitHub notifications and deletes any for closed or merged PRs.
+#
+# Usage: creek_gh_clean_notifications
+# Requires: gh CLI authenticated
+
+setopt LOCAL_OPTIONS
+unsetopt XTRACE
+
+echo "Fetching notifications..."
+
+local notifications
+notifications=$(gh api "notifications?all=false" --paginate \
+  --jq '.[] | select(.subject.type == "PullRequest") | .id + "\t" + .subject.url' 2>/dev/null)
+
+if [[ -z "$notifications" ]]; then
+  echo "No PR notifications found."
+  return 0
+fi
+
+local total=0 deleted=0
+
+while IFS=$'\t' read -r notif_id pr_url; do
+  (( ++total ))
+  local pr_num=$(basename "$pr_url")
+  local repo=$(echo "$pr_url" | sed -E 's|.*/repos/([^/]+/[^/]+)/pulls/.*|\1|')
+
+  if [[ $(gh api "$pr_url" --jq '.state' 2>/dev/null) == "closed" ]]; then
+    echo "[$total] Deleting:  $repo #$pr_num"
+    gh api --method DELETE "notifications/threads/$notif_id" >/dev/null 2>&1
+    (( ++deleted ))
+  else
+    echo "[$total] Keeping:   $repo #$pr_num"
+  fi
+done <<< "$notifications"
+
+echo "Done. Deleted $deleted of $total PR notifications."
