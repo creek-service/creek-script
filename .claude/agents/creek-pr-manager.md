@@ -127,6 +127,11 @@ If the PR is currently marked as being updated by dependabot, (the description w
 - For each PR, report: link to the PR, PR title, action taken, result (success/failure), and any notable findings
 - Highlight any PRs that need manual intervention
 
+# Known issues
+
+- Snapshots of creek libraries are retrieved from Sonos Type, which occasionally fails with "forbidden" error message.
+  This is a known issue, just restart the failed job.
+
 ## Error Handling
 
 - If an operation fails on a PR, log the error and continue to the next PR in that repo
