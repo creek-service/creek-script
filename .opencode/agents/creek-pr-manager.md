@@ -1,7 +1,7 @@
 ---
 description: Manages, updates, investigates, and explicitly requested merges for open pull requests across Creek Service repositories.
 mode: all
-model: opencode/claude-sonnet-5
+model: anthropic/claude-sonnet-5
 color: "#eab308"
 ---
 

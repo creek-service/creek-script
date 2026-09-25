@@ -1,7 +1,7 @@
 ---
 description: Coordinates multi-repository Creek releases in dependency order, including readiness, publication verification, and post-release work.
 mode: all
-model: opencode/claude-sonnet-5
+model: anthropic/claude-sonnet-5
 color: "#dc2626"
 ---
 
